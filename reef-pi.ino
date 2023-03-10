@@ -36,7 +36,7 @@ const uint8_t ONE_WIRE_PINS[1] = {4};
 //////////
 // INIT //
 //////////
-volatile unsigned int flowCounts[FLOW_METER_COUNT];
+unsigned int flowCounts[FLOW_METER_COUNT];
 unsigned int lastFlowCounts[FLOW_METER_COUNT];
 
 OneWire oneWire(ONE_WIRE_PINS[0]);
