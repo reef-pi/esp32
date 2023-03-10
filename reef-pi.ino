@@ -29,15 +29,15 @@ const uint8_t INLET_PINS[INLET_COUNT] = { 25, 26, 36, 39 };
 const uint8_t JACK_PINS[JACK_COUNT] = { 12, 13, 14, 27 };
 const uint8_t PWM_CHANNELS[JACK_COUNT] = { 0, 1, 2, 3 };
 const uint8_t PH_ADDR[PH_COUNT] = {98};
-const uint8_t FLOW_METER_PINS[FLOW_METER_COUNT] = {34};
+const uint8_t FLOW_METER_PINS[1] = {34};
 const uint8_t ANALOG_INPUT_PINS[ANALOG_INPUT_COUNT] = { 32, 33 };
 const uint8_t ONE_WIRE_PINS[1] = {4};
 
 //////////
 // INIT //
 //////////
-unsigned int flowCounts[FLOW_METER_COUNT];
-unsigned int lastFlowCounts[FLOW_METER_COUNT];
+volatile unsigned int flowCounts;
+unsigned int lastFlowCounts;
 
 OneWire oneWire(ONE_WIRE_PINS[0]);
 DallasTemperature ds18b20(&oneWire);
@@ -100,10 +100,8 @@ void loop() {
     digitalWrite(LED_BUILTIN, LOW);
     delay(950);
   }
-  for (size_t i = 0; i < FLOW_METER_COUNT; i++) {
-    lastFlowCounts[i] = flowCounts[i];
-    flowCounts[i] = 0;
-  }
+  lastFlowCounts = flowCounts;
+  flowCounts = 0;
 }
 
 ///////////////
@@ -162,9 +160,9 @@ void startPins(uint8_t type, const uint8_t PINS[], uint8_t count){
     //Init FLOWMETER
     if (type == 5){
       pinMode(PINS[i], INPUT);
-      flowCounts[i] = 0;
-      lastFlowCounts[i] = 0;
-      attachInterruptArg(PINS[i], flowMeterCounter, &(flowCounts[i]), FALLING);
+      flowCounts = 0;
+      lastFlowCounts = 0;
+      attachInterrupt(PINS[i], flowMeterCounter, FALLING);
     } 
     //Init ANALOGINPUT
     if (type == 6){
@@ -173,9 +171,9 @@ void startPins(uint8_t type, const uint8_t PINS[], uint8_t count){
     //Message for Pin IDs
     if (type > 2){
       Serial.print("\tPin IDs:");
-      Serial.print(subIDs[type-2]);
+      Serial.print(subIDs[type-3]);
       Serial.print("-");
-      Serial.println(subIDs[type-1]-1);
+      Serial.println(subIDs[type-2]-1);
     }
   }
 }
@@ -300,7 +298,7 @@ void readAnalogInput(AsyncWebServerRequest *request) {
   } else if (id < DS18B20_COUNT + PH_COUNT + FLOW_METER_COUNT) {
     subId = id - DS18B20_COUNT - PH_COUNT;
     pin = FLOW_METER_PINS[subId];
-    value = readFlowMeter(subId);
+    value = readFlowMeter();
   } else {
     subId = id - DS18B20_COUNT - PH_COUNT - FLOW_METER_COUNT;
     pin = ANALOG_INPUT_PINS[subId];
@@ -313,7 +311,7 @@ void readAnalogInput(AsyncWebServerRequest *request) {
 }
 
 float readPh(uint8_t subId){
-  uint8_t bytes= 10;
+  uint8_t bytes = 10;
   Wire.beginTransmission(PH_ADDR[subId]);
   Wire.write(byte(0x52));
   Wire.write(byte(0x00));
@@ -330,13 +328,11 @@ float readPh(uint8_t subId){
   return -1.0;
 }
 
-float readFlowMeter(uint8_t subId){
-  unsigned int value = lastFlowCounts[subId];
-  return float(value);
+float readFlowMeter(){
+  return float(lastFlowCounts);
 }
 
 // counter function to increment flowmeter value
-void ARDUINO_ISR_ATTR flowMeterCounter(void* arg){
-  unsigned int* val = static_cast<unsigned int*>(arg);
-  (*val)++;
+void ARDUINO_ISR_ATTR flowMeterCounter(){
+  flowCounts++;
 }
