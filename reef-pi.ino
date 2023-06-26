@@ -1,10 +1,10 @@
 #include <WiFi.h>
 #include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include <TokenIterator.h>
-#include <UrlTokenBindings.h>
+#include <ESPAsyncWebSrv.h>
+#include <StringTokenizer.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <ESPmDNS.h>
 
 #define OUTLET_COUNT 6
 #define INLET_COUNT 4
@@ -13,10 +13,9 @@
 #define PWM_FREQ 5000
 #define PWM_RESOLUTION 8
 
-
-
 const char *ssid = "SET_SSID";
 const char *password = "SET_PASSWORD";
+const char *host = "reef-pi-node";
 
 const int outletPins[OUTLET_COUNT] = { 5, 16, 17, 18, 19, 23 };
 const int inletPins[INLET_COUNT] = { 1, 3, 14, 36 };
@@ -54,97 +53,98 @@ void setup() {
     Serial.println("Connecting to WiFi..");
   }
   Serial.println(WiFi.localIP());
+  if (!MDNS.begin(host)) {
+    Serial.println("Error setting up MDNS responder!");
+    while (1) {
+      delay(1000);
+    }
+  }
+  MDNS.addService("http", "tcp", 80);
   server.on("/outlets/*", HTTP_POST, switchOutlet);
   server.on("/inlets/*", HTTP_GET, readInlet);
   server.on("/jacks/*", HTTP_POST, setJackValue);
   server.on("/analog_inputs/*", HTTP_GET, readAnalogInput);
-
+  server.onNotFound([](AsyncWebServerRequest *request) {
+    request->send(404, "text/plain", "not found");
+  });
   server.begin();
 }
 
 void loop() {
 }
 
-UrlTokenBindings parseURL(AsyncWebServerRequest *request, char templatePath[]) {
-  char urlBuffer[30];
-  request->url().toCharArray(urlBuffer, 30);
-  int urlLength = request->url().length();
-  TokenIterator templateIterator(templatePath, strlen(templatePath), '/');
-  TokenIterator pathIterator(urlBuffer, urlLength, '/');
-  UrlTokenBindings bindings(templateIterator, pathIterator);
-  return bindings;
-}
-
 void switchOutlet(AsyncWebServerRequest *request) {
-  char path[] = "/outlets/:id/:action";
-  UrlTokenBindings bindings = parseURL(request, path);
-
-  int id = String(bindings.get("id")).toInt();
+  StringTokenizer pathParams(request->url().substring(1), "/");
+  pathParams.nextToken();
+  int id = pathParams.nextToken().toInt();
   if (id < 0 || id >= OUTLET_COUNT) {
     request->send(409, "text/plain", "invalid outlet pin id");
-  }
-  String action = String(bindings.get("action"));
-  Serial.println("Outlet Pin:" + String(outletPins[id]) + ", Action:" + action);
-  if (action.equals("on")) {
-    digitalWrite(outletPins[id], HIGH);
-    request->send(200, "text/plain", "high");
-  } else if (action.equals("off")) {
-    digitalWrite(outletPins[id], LOW);
-    request->send(200, "text/plain", "low");
   } else {
-    request->send(409, "text/plain", "unrecognized action");
+    String action = pathParams.nextToken();
+    Serial.println("Outlet Pin:" + String(outletPins[id]) + ", Action:" + action);
+    if (action.equals("on")) {
+      digitalWrite(outletPins[id], HIGH);
+      request->send(200, "text/plain", "high");
+    } else if (action.equals("off")) {
+      digitalWrite(outletPins[id], LOW);
+      request->send(200, "text/plain", "low");
+    } else {
+      request->send(409, "text/plain", "unrecognized action");
+    }
   }
 }
 
 void readInlet(AsyncWebServerRequest *request) {
-  char path[] = "/inlets/:id";
-  UrlTokenBindings bindings = parseURL(request, path);
-  int id = String(bindings.get("id")).toInt();
+  StringTokenizer pathParams(request->url().substring(1), "/");
+  pathParams.nextToken();
+  int id = pathParams.nextToken().toInt();
   if (id < 0 || id >= INLET_COUNT) {
     request->send(409, "text/plain", "invalid inlet pin id");
+  } else {
+    int v = digitalRead(inletPins[id]);
+    Serial.println("Inlet pin:" + String(inletPins[id]) + " Value:" + String(v));
+    request->send(200, "text/plain", String(v));
   }
-  int v = digitalRead(inletPins[id]);
-  Serial.println("Inlet pin:" + String(inletPins[id]) + " Value:" + String(v));
-  request->send(200, "text/plain", String(v));
 }
 
 
 void readAnalogInput(AsyncWebServerRequest *request) {
-  char path[] = "/analog_inputs/:id";
-  UrlTokenBindings bindings = parseURL(request, path);
-  int id = String(bindings.get("id")).toInt();
-
+  StringTokenizer pathParams(request->url().substring(1), "/");
+  pathParams.nextToken();
+  int id = pathParams.nextToken().toInt();
   if (id < 0 || id > ANALOG_INPUT_COUNT) {
     request->send(409, "text/plain", "invalid inlet pin id");
-  }
-  float value;
-  if (id == 0) {
-    ds18b20.requestTemperatures();
-    value = ds18b20.getTempCByIndex(0);
   } else {
-    value = analogRead(analogInputPins[id]);
+    float value;
+    if (id == 0) {
+      ds18b20.requestTemperatures();
+      value = ds18b20.getTempCByIndex(0);
+    } else {
+      value = analogRead(analogInputPins[id]);
+    }
+    Serial.println("Analog Input pin:" + String(analogInputPins[id]) + " Value:" + String(value));
+    request->send(200, "text/plain", String(value));
   }
-  Serial.println("Analog Input pin:" + String(analogInputPins[id]) + " Value:" + String(value));
-  request->send(200, "text/plain", String(value));
 }
 
 
 
 void setJackValue(AsyncWebServerRequest *request) {
-  char path[] = "/jacks/:id/:value";
-  UrlTokenBindings bindings = parseURL(request, path);
-  int id = String(bindings.get("id")).toInt();
-  int dc = String(bindings.get("value")).toInt();
+  StringTokenizer pathParams(request->url().substring(1), "/");
+  pathParams.nextToken();
+  int id = pathParams.nextToken().toInt();
+  int dc = pathParams.nextToken().toInt();
   if (id < 0 || id >= JACK_COUNT) {
     request->send(409, "text/plain", "invalid inlet pin id");
+  } else {
+    if (dc > 255) {
+      dc = 255;
+    }
+    if (dc < 0) {
+      dc = 0;
+    }
+    Serial.println("PWM Pin" + String(jackPins[id]) + " DutyCycle:" + String(dc));
+    ledcWrite(pwmChannels[id], dc);
+    request->send(200, "text/plain", String(dc));
   }
-  if (dc > 255) {
-    dc = 255;
-  }
-  if (dc < 0) {
-    dc = 0;
-  }
-  Serial.println("PWM Pin" + String(jackPins[id]) + " DutyCycle:" + String(dc));
-  ledcWrite(pwmChannels[id], dc);
-  request->send(200, "text/plain", String(dc));
 }
