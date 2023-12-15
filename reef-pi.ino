@@ -25,6 +25,10 @@ const int pwmChannels[JACK_COUNT] = { 0, 1, 2, 3 };
 const int analogInputPins[ANALOG_INPUT_COUNT] = { 32, 33 };
 const int oneWirePin = 4;
 
+unsigned long currentMillis = millis();
+unsigned long previousMillis = 0;
+unsigned long interval = 30000;
+
 OneWire oneWire(oneWirePin);
 DallasTemperature ds18b20(&oneWire);
 AsyncWebServer server(80);
@@ -63,6 +67,14 @@ void setup() {
 }
 
 void loop() {
+  // if WiFi is down, try reconnecting
+  if ((WiFi.status() != WL_CONNECTED) && (currentMillis - previousMillis >=interval)) {
+    Serial.print(millis());
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    WiFi.reconnect();
+    previousMillis = currentMillis;
+}
 }
 
 UrlTokenBindings parseURL(AsyncWebServerRequest *request, char templatePath[]) {
