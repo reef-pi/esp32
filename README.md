@@ -51,7 +51,7 @@ In reef-pi to integrate this esp32 based device, add a new driver of type `esp32
 
 ##  A special note on ds18b20 temperature sensor integration
 
-In main reef-pi temperature tab is an independant module with ds18b20 integration on the pi itself. With esp32, all analog sensors including ds18b20 is modeled as analog input and can only be accessed through pH module. Hence ds18b20 sensors integrated through esp32 can only be read (and used for equipment control) through the ph module. In future version of reef-pi temperature and ph module will be comgined and this annoyance will be addressed.
+In main reef-pi temperature tab is an independant module with ds18b20 integration on the pi itself. With esp32, all analog sensors including ds18b20 is modeled as analog input and can only be accessed through pH module. Hence ds18b20 sensors integrated through esp32 can only be read (and used for equipment control) through the ph module. In a future version of reef-pi temperature and ph module will be combined and this annoyance will be addressed.
 
-One last note, the current esp32 firmeware uses a speical trick that the 0th analog input is treated as one wire pin. update the code if you are not using it or using a different pin for one wire integration. You can also leave it as it and just not use those pins/IDs in the reef-pi side.
+One last note, the current esp32 firmware uses a special trick that the 0th analog input is treated as one wire pin. Update the code if you are not using it or using a different pin for one wire integration. You can also leave it as is and just not use those pins/IDs in the reef-pi side.
 
