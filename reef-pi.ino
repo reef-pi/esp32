@@ -2,6 +2,8 @@
 #include "Wire.h"
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <ESPAsync_WiFiManager.h>
+#include <DNSServer.h>
 #include <TokenIterator.h>
 #include <UrlTokenBindings.h>
 #include <OneWire.h>
@@ -20,10 +22,6 @@
 #define PWM_FREQ 5000
 #define PWM_RESOLUTION 8
 
-
-const char *ssid = "SET_SSID";
-const char *password = "SET_PASSWORD";
-
 const uint8_t OUTLET_PINS[OUTLET_COUNT] = { 5, 16, 17, 18, 19, 23 };
 const uint8_t INLET_PINS[INLET_COUNT] = { 25, 26, 36, 39 };
 const uint8_t JACK_PINS[JACK_COUNT] = { 12, 13, 14, 27 };
@@ -41,11 +39,12 @@ unsigned int lastFlowCounts;
 
 OneWire oneWire(ONE_WIRE_PINS[0]);
 DallasTemperature ds18b20(&oneWire);
+DNSServer dns;
 AsyncWebServer server(80);
+AsyncWiFiManager wifiManager(&server, &dns);
 
 void setup() {
   Serial.begin(115200);
-  //while(!Serial);
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
 
@@ -66,16 +65,16 @@ void setup() {
   }
 
   Serial.println("Starting WiFi..");
-  WiFi.begin(ssid, password);  
-  while (WiFi.status() != WL_CONNECTED) {
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(50);
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(1000);
-    Serial.println("\tConnecting to WiFi..");
+  wifiManager.setConfigPortalTimeout(180);
+
+  if (!wifiManager.autoConnect("ESP32-Setup")) {
+    Serial.println("WiFi failed, restarting...");
+    ESP.restart();
   }
+
   Serial.print("\tWiFi-IP:");
   Serial.println(WiFi.localIP());
+
   server.on("/outlets/*", HTTP_POST, switchOutlet);
   server.on("/inlets/*", HTTP_GET, readInlet);
   server.on("/jacks/*", HTTP_POST, setJackValue);
@@ -88,6 +87,7 @@ void setup() {
 // MAIN LOOP //
 ///////////////
 void loop() {
+  dns.processNextRequest();
   if (WiFi.status() == WL_CONNECTED){
     digitalWrite(LED_BUILTIN, HIGH);
     delay(950);
